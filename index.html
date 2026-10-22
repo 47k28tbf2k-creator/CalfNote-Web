@@ -1,0 +1,306 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#28634d">
+<title>CalfNote | 子牛管理</title>
+<style>
+:root{font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif;color:#20352b;background:#f4f7f3}
+*{box-sizing:border-box}
+body{margin:0}
+header{background:#28634d;color:white;padding:22px 18px}
+header h1{margin:0;font-size:27px}
+header p{margin:6px 0 0;font-size:13px}
+main{max-width:850px;margin:auto;padding:16px}
+nav{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+button,.btn{border:0;border-radius:10px;padding:11px 14px;background:#28634d;color:white;font-size:14px;cursor:pointer}
+nav button{background:#dfe9e1;color:#244c39}
+nav button.active{background:#28634d;color:white}
+.panel,.card{background:white;border:1px solid #e0e8df;border-radius:15px;padding:16px;margin-bottom:14px}
+h2{font-size:19px;margin:0 0 14px}
+h3{margin:0 0 8px;font-size:17px}
+label{display:block;font-size:13px;font-weight:600;margin:12px 0 5px}
+input,select,textarea{width:100%;padding:11px;border:1px solid #ccd8cd;border-radius:9px;font:inherit;background:white}
+textarea{min-height:65px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.muted{font-size:13px;color:#68786d}
+.tag{display:inline-block;background:#e4f1e6;color:#28634d;padding:4px 8px;border-radius:7px;font-size:12px;margin:3px 3px 3px 0}
+.due{border-left:4px solid #d79b35}
+.done{color:#28634d}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.secondary{background:#e7eee8;color:#244c39}
+.danger{background:#a33e36}
+.vaccine{border-top:1px solid #e8eee8;padding:12px 0}
+.empty{text-align:center;padding:25px;color:#748276}
+small{color:#6d7b70}
+footer{text-align:center;color:#78877a;font-size:12px;padding:20px}
+[hidden]{display:none!important}
+@media(max-width:480px){.grid{grid-template-columns:1fr}main{padding:11px}}
+</style>
+</head>
+<body>
+<header>
+  <h1>🐄 CalfNote</h1>
+  <p>子牛管理・ワクチンカレンダー</p>
+</header>
+<main>
+  <nav>
+    <button class="active" data-tab="today">今日の予定</button>
+    <button data-tab="calves">子牛一覧</button>
+    <button data-tab="add">子牛を登録</button>
+    <button data-tab="backup">データ管理</button>
+  </nav>
+
+  <section id="today">
+    <div class="panel">
+      <h2>📅 今日の接種予定</h2>
+      <p class="muted" id="todayDate"></p>
+      <div id="todayList"></div>
+    </div>
+  </section>
+
+  <section id="calves" hidden>
+    <div class="panel">
+      <h2>🐮 登録済みの子牛</h2>
+      <input id="search" placeholder="耳標番号・母牛番号で検索">
+    </div>
+    <div id="calfList"></div>
+  </section>
+
+  <section id="add" hidden>
+    <div class="panel">
+      <h2>子牛の新規登録</h2>
+      <form id="calfForm">
+        <label>耳標番号 *</label>
+        <input name="earTag" required>
+        <label>母牛番号</label>
+        <input name="damId" placeholder="例：010(1599)">
+        <label>生年月日 *</label>
+        <input name="birthDate" type="date" required>
+        <label>性別 *</label>
+        <select name="sex" required>
+          <option value="メス">メス</option>
+          <option value="オス">オス</option>
+        </select>
+        <label>メモ</label>
+        <textarea name="notes"></textarea>
+        <div class="actions">
+          <button type="submit">子牛を登録する</button>
+        </div>
+      </form>
+      <p class="muted">登録するとTSV・2週齢・6週齢の予定を作成します。</p>
+    </div>
+  </section>
+
+  <section id="backup" hidden>
+    <div class="panel">
+      <h2>💾 データ管理</h2>
+      <p>子牛データとワクチン記録をJSON形式で保存できます。</p>
+      <div class="actions">
+        <button id="exportBtn">JSONを保存</button>
+        <button class="secondary" id="importBtn">JSONを読み込む</button>
+        <input id="fileInput" type="file" accept=".json,application/json" hidden>
+      </div>
+      <p class="muted">読み込みは現在のWeb版のデータをバックアップの内容に置き換えます。先に必要なデータを保存してください。</p>
+      <p id="backupMessage" role="status"></p>
+    </div>
+    <div class="panel">
+      <h2>このWeb版について</h2>
+      <p class="muted">データはこのブラウザ内に保存します。ブラウザのデータ消去や端末変更に備えて、定期的にJSONを保存してください。iPhoneアプリとは自動同期されません。</p>
+    </div>
+  </section>
+  <footer>CalfNote Web · 大切な子牛の記録</footer>
+</main>
+
+<script>
+const KEY = "calfnote-web-data-v1";
+const names = [
+  {name:"TSV", days:0},
+  {name:"キャトルバクト（生後2週ワクチン）", days:14},
+  {name:"キャトルバクト（生後6週ワクチン）", days:42}
+];
+let data = {formatVersion:1, exportDate:new Date().toISOString(), calves:[], vaccineRecords:[]};
+
+function dateOnly(value){
+  const d = new Date(value);
+  return isNaN(d) ? "" : d.toLocaleDateString("sv-SE");
+}
+function dateLabel(value){
+  const d = new Date(value);
+  return isNaN(d) ? "日付不明" : d.toLocaleDateString("ja-JP");
+}
+function localNoon(dateString){
+  return new Date(dateString + "T12:00:00").toISOString();
+}
+function save(){
+  data.exportDate = new Date().toISOString();
+  localStorage.setItem(KEY, JSON.stringify(data));
+}
+function load(){
+  try{
+    const stored = localStorage.getItem(KEY);
+    if(stored){
+      const parsed = JSON.parse(stored);
+      if(Array.isArray(parsed.calves) && Array.isArray(parsed.vaccineRecords)){
+        data = parsed;
+      }
+    }
+  }catch(e){console.error(e)}
+}
+function makeRecords(calf){
+  const birth = dateOnly(calf.birthDate);
+  if(!birth) return [];
+  return names.map(v => ({
+    calfTag:String(calf.earTag),
+    vaccineName:v.name,
+    scheduledDate:localNoon(addDays(birth,v.days)),
+    isCompleted:false
+  }));
+}
+function addDays(date,days){
+  const d = new Date(date+"T12:00:00");
+  d.setDate(d.getDate()+days);
+  return dateOnly(d.toISOString());
+}
+function escapeHTML(value){
+  return String(value ?? "").replace(/[&<>"']/g,c=>({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+  }[c]));
+}
+function calfFor(record){
+  return data.calves.find(c=>String(c.earTag)===String(record.calfTag));
+}
+function isSameDay(a,b){return dateOnly(a)===dateOnly(b)}
+function renderToday(){
+  document.getElementById("todayDate").textContent =
+    new Date().toLocaleDateString("ja-JP",{year:"numeric",month:"long",day:"numeric",weekday:"long"});
+  const today = dateOnly(new Date().toISOString());
+  const list = data.vaccineRecords
+    .filter(r=>!r.isCompleted && dateOnly(r.scheduledDate)<=today)
+    .sort((a,b)=>new Date(a.scheduledDate)-new Date(b.scheduledDate));
+  const target = document.getElementById("todayList");
+  if(!list.length){
+    target.innerHTML='<div class="empty">今日までの未接種予定はありません 🎉</div>';
+    return;
+  }
+  target.innerHTML=list.map(r=>{
+    const calf=calfFor(r);
+    const overdue=dateOnly(r.scheduledDate)<today;
+    return `<div class="card due">
+      <h3>${escapeHTML(calf?.earTag ?? r.calfTag)} — ${escapeHTML(r.vaccineName)}</h3>
+      <p class="muted">予定日：${dateLabel(r.scheduledDate)}${overdue?'（予定日経過）':'（本日）'}</p>
+      <p class="muted">母牛番号：${escapeHTML(calf?.damId || "未登録")}</p>
+      <button onclick="completeRecord('${escapeHTML(r.calfTag)}','${escapeHTML(r.vaccineName)}','${escapeHTML(r.scheduledDate)}')">接種済みにする</button>
+    </div>`;
+  }).join("");
+}
+function renderCalves(){
+  const q=document.getElementById("search").value.trim().toLowerCase();
+  const calves=data.calves.filter(c=>
+    String(c.earTag).toLowerCase().includes(q) ||
+    String(c.damId||"").toLowerCase().includes(q)
+  );
+  const target=document.getElementById("calfList");
+  if(!calves.length){
+    target.innerHTML='<div class="panel empty">子牛がいません。登録するか、バックアップを読み込んでください。</div>';
+    return;
+  }
+  target.innerHTML=calves.map(c=>{
+    const records=data.vaccineRecords.filter(r=>String(r.calfTag)===String(c.earTag));
+    return `<div class="card">
+      <h3>耳標番号：${escapeHTML(c.earTag)}</h3>
+      <span class="tag">${escapeHTML(c.sex||"未登録")}</span>
+      <span class="tag">生年月日：${dateLabel(c.birthDate)}</span>
+      <p>母牛番号：${escapeHTML(c.damId||"未登録")}</p>
+      ${c.notes?`<p class="muted">${escapeHTML(c.notes)}</p>`:""}
+      <h3>ワクチン記録</h3>
+      ${records.length?records.map(r=>`<div class="vaccine">
+        <strong>${escapeHTML(r.vaccineName)}</strong><br>
+        <span class="muted">予定：${dateLabel(r.scheduledDate)}</span><br>
+        ${r.isCompleted?`<span class="done">✓ 接種済み：${dateLabel(r.administeredDate||r.scheduledDate)}</span>`:'<span class="muted">未接種</span>'}
+        ${!r.isCompleted?`<div class="actions"><button onclick="completeRecord('${escapeHTML(r.calfTag)}','${escapeHTML(r.vaccineName)}','${escapeHTML(r.scheduledDate)}')">接種済みにする</button></div>`:""}
+      </div>`).join(""):'<p class="muted">記録なし</p>'}
+    </div>`;
+  }).join("");
+}
+function completeRecord(tag,name,scheduled){
+  const record=data.vaccineRecords.find(r=>
+    String(r.calfTag)===String(tag) &&
+    r.vaccineName===name &&
+    r.scheduledDate===scheduled
+  );
+  if(!record || record.isCompleted) return;
+  if(!confirm(`${tag} の「${name}」を接種済みにしますか？`)) return;
+  record.isCompleted=true;
+  record.administeredDate=new Date().toISOString();
+  save();render();
+}
+function render(){
+  renderToday();renderCalves();
+}
+document.querySelectorAll("nav button").forEach(btn=>{
+  btn.addEventListener("click",()=>{
+    document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("active",b===btn));
+    document.querySelectorAll("main section").forEach(s=>s.hidden=s.id!==btn.dataset.tab);
+    if(btn.dataset.tab==="today"||btn.dataset.tab==="calves") render();
+  });
+});
+document.getElementById("search").addEventListener("input",renderCalves);
+document.getElementById("calfForm").addEventListener("submit",e=>{
+  e.preventDefault();
+  const form=new FormData(e.target);
+  const calf={
+    earTag:String(form.get("earTag")).trim(),
+    damId:String(form.get("damId")).trim(),
+    birthDate:localNoon(String(form.get("birthDate"))),
+    sex:String(form.get("sex")),
+    notes:String(form.get("notes")).trim()
+  };
+  if(data.calves.some(c=>String(c.earTag)===calf.earTag)){
+    alert("同じ耳標番号の子牛が登録されています。");return;
+  }
+  data.calves.push(calf);
+  data.vaccineRecords.push(...makeRecords(calf));
+  save();e.target.reset();render();
+  alert("子牛を登録しました！");
+  document.querySelector('[data-tab="calves"]').click();
+});
+document.getElementById("exportBtn").addEventListener("click",()=>{
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;a.download="CalfNote-Backup.json";a.click();
+  URL.revokeObjectURL(url);
+  document.getElementById("backupMessage").textContent="JSONファイルの保存を開始しました。";
+});
+document.getElementById("importBtn").addEventListener("click",()=>{
+  document.getElementById("fileInput").click();
+});
+document.getElementById("fileInput").addEventListener("change",async e=>{
+  const file=e.target.files[0];if(!file)return;
+  try{
+    const imported=JSON.parse(await file.text());
+    if(!Array.isArray(imported.calves)||!Array.isArray(imported.vaccineRecords)){
+      throw new Error("calves または vaccineRecords がありません");
+    }
+    if(!confirm(`子牛${imported.calves.length}頭、ワクチン記録${imported.vaccineRecords.length}件を読み込みます。現在のWeb版データは置き換わります。続けますか？`))return;
+    data={
+      formatVersion:imported.formatVersion||1,
+      exportDate:new Date().toISOString(),
+      calves:imported.calves,
+      vaccineRecords:imported.vaccineRecords
+    };
+    save();render();
+    document.getElementById("backupMessage").textContent="バックアップを読み込みました。";
+    alert("読み込み完了！");
+  }catch(err){
+    alert("読み込みできませんでした。CalfNoteのJSONバックアップか確認してください。\n"+err.message);
+  }finally{e.target.value=""}
+});
+load();
+render();
+</script>
+</body>
+</html>

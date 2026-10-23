@@ -309,6 +309,7 @@ function renderCalves(){
       <span class="tag">生年月日：${dateLabel(c.birthDate)}</span>
       <p>母牛番号：${escapeHTML(c.damId||"未登録")}</p>
       ${c.notes?`<p class="muted">${escapeHTML(c.notes)}</p>`:""}
+      <div class="actions"><button class="secondary" onclick="editCalf(${data.calves.indexOf(c)})">子牛情報を編集</button></div>
       <h3>ワクチン記録</h3>
       ${records.length?records.map(r=>`<div class="vaccine">
         <strong>${escapeHTML(r.vaccineName)}</strong><br>
@@ -319,6 +320,54 @@ function renderCalves(){
     </div>`;
   }).join("");
 }
+function editCalf(index){
+  const calf=data.calves[index];
+  if(!calf) return;
+  const oldTag=String(calf.earTag);
+  const earTag=prompt("耳標番号",calf.earTag);
+  if(earTag===null) return;
+  const newTag=earTag.trim();
+  if(!newTag){alert("耳標番号は空欄にできません。");return;}
+  if(data.calves.some((c,i)=>i!==index && String(c.earTag)===newTag)){
+    alert("同じ耳標番号の子牛がすでに登録されています。");return;
+  }
+  const damId=prompt("母牛番号",calf.damId||"");
+  if(damId===null) return;
+  const birthDate=prompt("生年月日（YYYY-MM-DD）",dateOnly(calf.birthDate));
+  if(birthDate===null) return;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(birthDate) || isNaN(new Date(birthDate+"T12:00:00").getTime())){
+    alert("生年月日は YYYY-MM-DD 形式で入力してください（例：2026-10-23）。");return;
+  }
+  const sex=prompt("性別（メス または オス）",calf.sex||"メス");
+  if(sex===null) return;
+  if(!["メス","オス"].includes(sex.trim())){alert("性別は「メス」または「オス」で入力してください。");return;}
+  const notes=prompt("メモ（不要なら空欄）",calf.notes||"");
+  if(notes===null) return;
+  const oldBirth=dateOnly(calf.birthDate);
+  calf.earTag=newTag;
+  calf.damId=damId.trim();
+  calf.birthDate=localNoon(birthDate);
+  calf.sex=sex.trim();
+  calf.notes=notes.trim();
+  if(newTag!==oldTag){
+    [data.vaccineRecords,data.treatmentRecords,data.healthChecks,data.colostrumRecords].forEach(list=>{
+      if(Array.isArray(list)) list.forEach(record=>{
+        if(String(record.calfTag)===oldTag) record.calfTag=newTag;
+      });
+    });
+  }
+  if(birthDate!==oldBirth){
+    data.vaccineRecords.forEach(record=>{
+      if(String(record.calfTag)===newTag && !record.isCompleted){
+        const vaccine=names.find(v=>v.name===record.vaccineName);
+        if(vaccine) record.scheduledDate=localNoon(addDays(birthDate,vaccine.days));
+      }
+    });
+  }
+  save();render();
+  alert("子牛情報を更新しました！");
+}
+
 function completeRecord(tag,name,scheduled){
   const record=data.vaccineRecords.find(r=>
     String(r.calfTag)===String(tag) &&

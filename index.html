@@ -50,6 +50,9 @@ footer{text-align:center;color:#78877a;font-size:12px;padding:20px}
     <button class="active" data-tab="today">今日の予定</button>
     <button data-tab="calves">子牛一覧</button>
     <button data-tab="add">子牛を登録</button>
+    <button data-tab="treatment">治療・投薬</button>
+    <button data-tab="health">下痢・肺炎チェック</button>
+    <button data-tab="colostrum">初乳管理</button>
     <button data-tab="backup">データ管理</button>
   </nav>
 
@@ -65,6 +68,8 @@ footer{text-align:center;color:#78877a;font-size:12px;padding:20px}
     <div class="panel">
       <h2>🐮 登録済みの子牛</h2>
       <input id="search" placeholder="耳標番号・母牛番号で検索">
+      <label>性別で絞り込み</label>
+      <select id="sexFilter"><option value="">すべて</option><option value="メス">メス</option><option value="オス">オス</option></select>
     </div>
     <div id="calfList"></div>
   </section>
@@ -94,16 +99,88 @@ footer{text-align:center;color:#78877a;font-size:12px;padding:20px}
     </div>
   </section>
 
+  <section id="treatment" hidden>
+    <div class="panel">
+      <h2>💊 治療・投薬履歴</h2>
+      <form id="treatmentForm">
+        <label>子牛 *</label>
+        <select name="calfTag" id="treatmentCalf" required></select>
+        <label>実施日 *</label>
+        <input name="date" type="date" required>
+        <label>症状・診断</label>
+        <input name="symptom" placeholder="例：下痢、発熱">
+        <label>薬剤名・処置</label>
+        <input name="medicine" placeholder="薬剤名、投薬量、処置など">
+        <label>担当者・メモ</label>
+        <textarea name="notes"></textarea>
+        <div class="actions"><button type="submit">履歴を保存</button></div>
+      </form>
+    </div>
+    <div class="panel">
+      <h2>登録済みの履歴</h2>
+      <div id="treatmentList"></div>
+    </div>
+  </section>
+
+  <section id="health" hidden>
+    <div class="panel">
+      <h2>🩺 下痢・肺炎チェック</h2>
+      <form id="healthForm">
+        <label>子牛 *</label>
+        <select name="calfTag" id="healthCalf" required></select>
+        <label>チェック日 *</label>
+        <input name="date" type="date" required>
+        <label>下痢</label>
+        <select name="diarrhea"><option value="なし">なし</option><option value="軽度">軽度</option><option value="中程度">中程度</option><option value="重度">重度</option><option value="未確認">未確認</option></select>
+        <label>肺炎・呼吸器症状</label>
+        <select name="pneumonia"><option value="なし">なし</option><option value="疑い">疑い</option><option value="症状あり">症状あり</option><option value="未確認">未確認</option></select>
+        <label>体温（℃）</label>
+        <input name="temperature" type="number" min="30" max="45" step="0.1" placeholder="例：39.2">
+        <label>食欲・活力・メモ</label>
+        <textarea name="notes"></textarea>
+        <div class="actions"><button type="submit">チェックを保存</button></div>
+      </form>
+      <p class="muted">このチェックは記録用です。診断の代わりにはなりません。症状が強い・悪化する場合は獣医師に相談してください。</p>
+    </div>
+    <div class="panel">
+      <h2>チェック履歴</h2>
+      <div id="healthList"></div>
+    </div>
+  </section>
+
+  <section id="colostrum" hidden>
+    <div class="panel">
+      <h2>🍼 初乳管理</h2>
+      <form id="colostrumForm">
+        <label>子牛 *</label>
+        <select name="calfTag" id="colostrumCalf" required></select>
+        <label>給与日時 *</label>
+        <input name="dateTime" type="datetime-local" required>
+        <label>給与量（L）</label>
+        <input name="amount" type="number" min="0" step="0.1" placeholder="例：3.0">
+        <label>品質・Brix（任意）</label>
+        <input name="quality" placeholder="例：Brix 24%">
+        <label>給与方法・メモ</label>
+        <textarea name="notes"></textarea>
+        <div class="actions"><button type="submit">初乳記録を保存</button></div>
+      </form>
+    </div>
+    <div class="panel">
+      <h2>初乳の記録</h2>
+      <div id="colostrumList"></div>
+    </div>
+  </section>
+
   <section id="backup" hidden>
     <div class="panel">
       <h2>💾 データ管理</h2>
-      <p>子牛データとワクチン記録をJSON形式で保存できます。</p>
+      <p>子牛データ、ワクチン記録、治療・投薬履歴、下痢・肺炎チェック、初乳記録をJSON形式で保存できます。</p>
       <div class="actions">
         <button id="exportBtn">JSONを保存</button>
         <button class="secondary" id="importBtn">JSONを読み込む</button>
         <input id="fileInput" type="file" accept=".json,application/json" hidden>
       </div>
-      <p class="muted">読み込みは現在のWeb版のデータをバックアップの内容に置き換えます。先に必要なデータを保存してください。</p>
+      <p class="muted">読み込みは現在のWeb版のデータをバックアップの内容に置き換えます。先に必要なデータを保存してください。旧形式のJSONでは、追加機能の記録は空の状態で読み込まれます。</p>
       <p id="backupMessage" role="status"></p>
     </div>
     <div class="panel">
@@ -121,7 +198,15 @@ const names = [
   {name:"キャトルバクト（生後2週ワクチン）", days:14},
   {name:"キャトルバクト（生後6週ワクチン）", days:42}
 ];
-let data = {formatVersion:1, exportDate:new Date().toISOString(), calves:[], vaccineRecords:[]};
+let data = {
+  formatVersion: 2,
+  exportDate: new Date().toISOString(),
+  calves: [],
+  vaccineRecords: [],
+  treatmentRecords: [],
+  healthChecks: [],
+  colostrumRecords: []
+};
 
 function dateOnly(value){
   const d = new Date(value);
@@ -144,7 +229,14 @@ function load(){
     if(stored){
       const parsed = JSON.parse(stored);
       if(Array.isArray(parsed.calves) && Array.isArray(parsed.vaccineRecords)){
-        data = parsed;
+        // Old JSON backups remain valid; missing newer lists are initialized as empty.
+        data = {
+          ...parsed,
+          formatVersion: parsed.formatVersion || 1,
+          treatmentRecords: Array.isArray(parsed.treatmentRecords) ? parsed.treatmentRecords : [],
+          healthChecks: Array.isArray(parsed.healthChecks) ? parsed.healthChecks : [],
+          colostrumRecords: Array.isArray(parsed.colostrumRecords) ? parsed.colostrumRecords : []
+        };
       }
     }
   }catch(e){console.error(e)}
@@ -198,9 +290,11 @@ function renderToday(){
 }
 function renderCalves(){
   const q=document.getElementById("search").value.trim().toLowerCase();
+  const sexFilter=document.getElementById("sexFilter")?.value||"";
   const calves=data.calves.filter(c=>
-    String(c.earTag).toLowerCase().includes(q) ||
-    String(c.damId||"").toLowerCase().includes(q)
+    (String(c.earTag).toLowerCase().includes(q) ||
+    String(c.damId||"").toLowerCase().includes(q)) &&
+    (!sexFilter || String(c.sex||"")===sexFilter)
   );
   const target=document.getElementById("calfList");
   if(!calves.length){
@@ -238,7 +332,7 @@ function completeRecord(tag,name,scheduled){
   save();render();
 }
 function render(){
-  renderToday();renderCalves();
+  renderToday();renderCalves();renderExtraLists();
 }
 document.querySelectorAll("nav button").forEach(btn=>{
   btn.addEventListener("click",()=>{
@@ -248,6 +342,7 @@ document.querySelectorAll("nav button").forEach(btn=>{
   });
 });
 document.getElementById("search").addEventListener("input",renderCalves);
+document.getElementById("sexFilter").addEventListener("change",renderCalves);
 document.getElementById("calfForm").addEventListener("submit",e=>{
   e.preventDefault();
   const form=new FormData(e.target);
@@ -290,7 +385,10 @@ document.getElementById("fileInput").addEventListener("change",async e=>{
       formatVersion:imported.formatVersion||1,
       exportDate:new Date().toISOString(),
       calves:imported.calves,
-      vaccineRecords:imported.vaccineRecords
+      vaccineRecords:imported.vaccineRecords,
+      treatmentRecords:Array.isArray(imported.treatmentRecords)?imported.treatmentRecords:[],
+      healthChecks:Array.isArray(imported.healthChecks)?imported.healthChecks:[],
+      colostrumRecords:Array.isArray(imported.colostrumRecords)?imported.colostrumRecords:[]
     };
     save();render();
     document.getElementById("backupMessage").textContent="バックアップを読み込みました。";
@@ -299,8 +397,114 @@ document.getElementById("fileInput").addEventListener("change",async e=>{
     alert("読み込みできませんでした。CalfNoteのJSONバックアップか確認してください。\n"+err.message);
   }finally{e.target.value=""}
 });
+
+function todayInputValue(){
+  const d = new Date();
+  const local = new Date(d.getTime() - d.getTimezoneOffset()*60000);
+  return local.toISOString().slice(0,10);
+}
+function fillCalfSelects(){
+  const ids = ["treatmentCalf","healthCalf","colostrumCalf"];
+  ids.forEach(id=>{
+    const select=document.getElementById(id);
+    if(!select) return;
+    const previous=select.value;
+    select.innerHTML='<option value="">子牛を選択してください</option>' +
+      data.calves.map(c=>`<option value="${escapeHTML(c.earTag)}">${escapeHTML(c.earTag)}${c.damId ? "（母牛："+escapeHTML(c.damId)+"）" : ""}</option>`).join("");
+    if(data.calves.some(c=>String(c.earTag)===previous)) select.value=previous;
+  });
+}
+function calfLabel(tag){
+  const calf=calfFor({calfTag:tag});
+  return calf ? `${calf.earTag}${calf.damId ? "（母牛："+calf.damId+"）" : ""}` : String(tag || "不明");
+}
+function renderExtraLists(){
+  fillCalfSelects();
+  const treatmentTarget=document.getElementById("treatmentList");
+  const treatments=[...(data.treatmentRecords||[])].sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+  treatmentTarget.innerHTML=treatments.length ? treatments.map(r=>`
+    <div class="card">
+      <h3>${escapeHTML(calfLabel(r.calfTag))} — ${escapeHTML(r.date||"日付不明")}</h3>
+      <p><strong>症状：</strong>${escapeHTML(r.symptom||"未記入")}</p>
+      <p><strong>薬剤・処置：</strong>${escapeHTML(r.medicine||"未記入")}</p>
+      ${r.notes?`<p class="muted">${escapeHTML(r.notes)}</p>`:""}
+      <div class="actions"><button class="danger" onclick="deleteEntry('treatmentRecords','${escapeHTML(r.id)}')">削除</button></div>
+    </div>`).join("") : '<p class="empty">治療・投薬履歴はまだありません。</p>';
+
+  const healthTarget=document.getElementById("healthList");
+  const checks=[...(data.healthChecks||[])].sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+  healthTarget.innerHTML=checks.length ? checks.map(r=>`
+    <div class="card">
+      <h3>${escapeHTML(calfLabel(r.calfTag))} — ${escapeHTML(r.date||"日付不明")}</h3>
+      <span class="tag">下痢：${escapeHTML(r.diarrhea||"未確認")}</span>
+      <span class="tag">肺炎：${escapeHTML(r.pneumonia||"未確認")}</span>
+      <p><strong>体温：</strong>${escapeHTML(r.temperature||"未記入")}${r.temperature?" ℃":""}</p>
+      ${r.notes?`<p class="muted">${escapeHTML(r.notes)}</p>`:""}
+      <div class="actions"><button class="danger" onclick="deleteEntry('healthChecks','${escapeHTML(r.id)}')">削除</button></div>
+    </div>`).join("") : '<p class="empty">チェック履歴はまだありません。</p>';
+
+  const colostrumTarget=document.getElementById("colostrumList");
+  const colostrum=[...(data.colostrumRecords||[])].sort((a,b)=>String(b.dateTime).localeCompare(String(a.dateTime)));
+  colostrumTarget.innerHTML=colostrum.length ? colostrum.map(r=>`
+    <div class="card">
+      <h3>${escapeHTML(calfLabel(r.calfTag))}</h3>
+      <p><strong>給与日時：</strong>${escapeHTML((r.dateTime||"").replace("T"," ")||"不明")}</p>
+      <p><strong>給与量：</strong>${escapeHTML(r.amount||"未記入")}${r.amount?" L":""}</p>
+      <p><strong>品質・Brix：</strong>${escapeHTML(r.quality||"未記入")}</p>
+      ${r.notes?`<p class="muted">${escapeHTML(r.notes)}</p>`:""}
+      <div class="actions"><button class="danger" onclick="deleteEntry('colostrumRecords','${escapeHTML(r.id)}')">削除</button></div>
+    </div>`).join("") : '<p class="empty">初乳の記録はまだありません。</p>';
+}
+function deleteEntry(listName,id){
+  if(!confirm("この記録を削除しますか？")) return;
+  data[listName]=(data[listName]||[]).filter(r=>String(r.id)!==String(id));
+  save();render();
+}
+function newId(){
+  return Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,8);
+}
+document.getElementById("treatmentForm").addEventListener("submit",e=>{
+  e.preventDefault();
+  const f=new FormData(e.target);
+  data.treatmentRecords=data.treatmentRecords||[];
+  data.treatmentRecords.push({
+    id:newId(), calfTag:String(f.get("calfTag")), date:String(f.get("date")),
+    symptom:String(f.get("symptom")||"").trim(), medicine:String(f.get("medicine")||"").trim(),
+    notes:String(f.get("notes")||"").trim()
+  });
+  save();e.target.reset();document.querySelector('#treatmentForm [name="date"]').value=todayInputValue();render();
+  alert("治療・投薬履歴を保存しました。");
+});
+document.getElementById("healthForm").addEventListener("submit",e=>{
+  e.preventDefault();
+  const f=new FormData(e.target);
+  data.healthChecks=data.healthChecks||[];
+  data.healthChecks.push({
+    id:newId(), calfTag:String(f.get("calfTag")), date:String(f.get("date")),
+    diarrhea:String(f.get("diarrhea")), pneumonia:String(f.get("pneumonia")),
+    temperature:String(f.get("temperature")||"").trim(), notes:String(f.get("notes")||"").trim()
+  });
+  save();e.target.reset();document.querySelector('#healthForm [name="date"]').value=todayInputValue();render();
+  alert("健康チェックを保存しました。");
+});
+document.getElementById("colostrumForm").addEventListener("submit",e=>{
+  e.preventDefault();
+  const f=new FormData(e.target);
+  data.colostrumRecords=data.colostrumRecords||[];
+  data.colostrumRecords.push({
+    id:newId(), calfTag:String(f.get("calfTag")), dateTime:String(f.get("dateTime")),
+    amount:String(f.get("amount")||"").trim(), quality:String(f.get("quality")||"").trim(),
+    notes:String(f.get("notes")||"").trim()
+  });
+  save();e.target.reset();render();
+  alert("初乳記録を保存しました。");
+});
+document.querySelectorAll('#treatmentForm [name="date"],#healthForm [name="date"]').forEach(el=>el.value=todayInputValue());
+
 load();
 render();
+renderExtraLists();
+
 </script>
 </body>
 </html>

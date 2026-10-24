@@ -309,7 +309,12 @@ function renderCalves(){
       <span class="tag">生年月日：${dateLabel(c.birthDate)}</span>
       <p>母牛番号：${escapeHTML(c.damId||"未登録")}</p>
       ${c.notes?`<p class="muted">${escapeHTML(c.notes)}</p>`:""}
-      <div class="actions"><button class="secondary" onclick="editCalf(${data.calves.indexOf(c)})">子牛情報を編集</button></div>
+      <div class="actions">
+        <button class="secondary" onclick="editCalf(${data.calves.indexOf(c)})">子牛情報を編集</button>
+        <button class="secondary" onclick="moveCalf(${data.calves.indexOf(c)},-1)" ${data.calves.indexOf(c)===0?'disabled':''}>↑ 上へ</button>
+        <button class="secondary" onclick="moveCalf(${data.calves.indexOf(c)},1)" ${data.calves.indexOf(c)===data.calves.length-1?'disabled':''}>↓ 下へ</button>
+        <button class="danger" onclick="deleteCalf(${data.calves.indexOf(c)})">子牛を削除</button>
+      </div>
       <h3>ワクチン記録</h3>
       ${records.length?records.map(r=>`<div class="vaccine">
         <strong>${escapeHTML(r.vaccineName)}</strong><br>
@@ -320,6 +325,39 @@ function renderCalves(){
     </div>`;
   }).join("");
 }
+function moveCalf(index,direction){
+  const targetIndex=index+direction;
+  if(index<0 || index>=data.calves.length || targetIndex<0 || targetIndex>=data.calves.length) return;
+  const [calf]=data.calves.splice(index,1);
+  data.calves.splice(targetIndex,0,calf);
+  save();
+  renderCalves();
+}
+function deleteCalf(index){
+  const calf=data.calves[index];
+  if(!calf) return;
+  const tag=String(calf.earTag);
+  const relatedCounts={
+    vaccineRecords:data.vaccineRecords.filter(r=>String(r.calfTag)===tag).length,
+    treatmentRecords:(data.treatmentRecords||[]).filter(r=>String(r.calfTag)===tag).length,
+    healthChecks:(data.healthChecks||[]).filter(r=>String(r.calfTag)===tag).length,
+    colostrumRecords:(data.colostrumRecords||[]).filter(r=>String(r.calfTag)===tag).length
+  };
+  const total=Object.values(relatedCounts).reduce((a,b)=>a+b,0);
+  const message=`耳標番号 ${tag} の子牛を削除しますか？\n\nこの子牛に紐づくワクチン・治療・健康チェック・初乳の記録${total}件も削除されます。\nこの操作は元に戻せません。先にJSONバックアップを取ることをおすすめします。`;
+  if(!confirm(message)) return;
+  data.calves.splice(index,1);
+  [data.vaccineRecords,data.treatmentRecords,data.healthChecks,data.colostrumRecords].forEach(list=>{
+    if(Array.isArray(list)){
+      for(let i=list.length-1;i>=0;i--){
+        if(String(list[i].calfTag)===tag) list.splice(i,1);
+      }
+    }
+  });
+  save();render();
+  alert(`耳標番号 ${tag} の子牛と関連記録を削除しました。`);
+}
+
 function editCalf(index){
   const calf=data.calves[index];
   if(!calf) return;
